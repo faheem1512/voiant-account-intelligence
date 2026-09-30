@@ -1,8 +1,8 @@
 # Voiant Prospect Intelligence — Codebase Handoff
 
-**Built by:** Zain Rashid  
-**Deployed at:** [voiant-icp.vercel.app](https://voiant-icp.vercel.app)  
-**GitHub:** github.com/ZainRashid19/voiant-icp  
+**Owner:** Faheem Moosa (handed off from Zain Rashid, original builder)  
+**Deployed on:** Vercel (project: voiant-account-intelligence)  
+**GitHub:** github.com/faheem1512/voiant-account-intelligence  
 
 ---
 
@@ -23,9 +23,12 @@ The system has two parts:
    Project with embedded research instructions. Claude researches each company
    and returns a scored, sourced table ready for outreach decisions.
 
-The Vercel dashboard (link above) is a read-only view for Faheem — he sees
-scanner results and downloads files. Zain runs the scanner locally each morning
-and pushes the output files to GitHub, which auto-updates the Vercel URL.
+The Vercel dashboard is for viewing results and finding ICP prospects — it
+shows scanner results and lets you download files. Faheem runs the scanner
+locally and pushes the output files to GitHub, which auto-updates the Vercel
+URL. (The Run Scanner / Run Research buttons in the dashboard work locally but
+not reliably on Vercel — its filesystem is read-only and background jobs are
+cut off. Run those locally.)
 
 ---
 
@@ -52,7 +55,7 @@ is out of scope:
 ## File Structure
 
 ```
-test_folder/
+voiant-account-intelligence/
 │
 ├── app.py                          # Flask web app (the Vercel dashboard)
 ├── scanner.py                      # Free trigger scanner (SEC EDGAR + Google News)
@@ -71,7 +74,6 @@ test_folder/
 ├── Procfile                        # Tells Railway/Vercel: web: python app.py
 ├── requirements.txt                # Python dependencies
 ├── vercel.json                     # Vercel deployment config
-└── .gitignore                      # Files excluded from GitHub
 ```
 
 ---
@@ -82,7 +84,7 @@ test_folder/
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Create a .env file in test_folder with:
+# 2. Create a .env file in the repo folder with:
 APP_PASSWORD=your_password_here
 SECRET_KEY=your_secret_key_here
 
@@ -97,26 +99,26 @@ http://localhost:5057
 
 ## Daily Morning Workflow
 
-1. **Zain runs the scanner locally:**
+1. **Faheem runs the scanner locally:**
    ```bash
    python scanner.py
    ```
    This generates `trigger_flags.xlsx` and `priority_requeue.xlsx`
 
-2. **Zain pushes results to GitHub** (auto-updates Faheem's Vercel link):
+2. **Faheem pushes results to GitHub** (auto-updates Faheem's Vercel link):
    ```bash
    git add trigger_flags.xlsx priority_requeue.xlsx
    git commit -m "update scanner results"
    git push
    ```
 
-3. **Faheem opens the Vercel URL** — downloads the priority list
+3. **Open the Vercel URL** (log in with `APP_PASSWORD`) — download the priority list
 
-4. **Faheem pastes the priority list into the Claude Project** — Claude
+4. **Paste the priority list into the Claude Project** — Claude
    researches each company using the embedded instructions and returns
    a scored table
 
-5. **Faheem reviews Band A and B accounts** and does manual outreach
+5. **Review Band A and B accounts** and do manual outreach
 
 ---
 
@@ -131,12 +133,14 @@ Your file must have at minimum these columns:
 - `Industry` (free text — mapped to ICP buckets via `industry_mapping.py`)
 - `Headquarters` (optional but useful)
 
-**Step 2** — Update the filename reference in `app.py` (line ~35):
+**Step 2** — Update the filename reference in `app.py` (`MASTER_LIST_XLSX`):
 ```python
 MASTER_LIST_XLSX = "Forbes_2000_master.xlsx"  # ← change to your filename
 ```
 
-**Step 3** — Update the filename reference in `scanner.py` (line ~96):
+**Step 3** — Update the filename reference in `scanner.py` (`INPUT_XLSX`). Note: running
+`python scanner.py` uses this file, while the dashboard uses `MASTER_LIST_XLSX`;
+point both at the same list if you want consistent results:
 ```python
 INPUT_XLSX = "test_40_accounts_READY.xlsx"  # ← change to your filename
 ```
@@ -211,8 +215,12 @@ The app is deployed at the Vercel URL above. Every push to the `main` branch
 on GitHub triggers an automatic redeploy (takes ~60 seconds).
 
 Environment variables are set in the Vercel dashboard (not in code):
-- `APP_PASSWORD` — login password for the web interface
-- `SECRET_KEY` — Flask session signing key
+- `APP_PASSWORD` — login password for the web interface (required on Vercel;
+  the app refuses to serve pages if it is missing)
+- `SECRET_KEY` — Flask session signing key (set a long random string, or logins
+  will reset between requests)
+- `ANTHROPIC_API_KEY` — only needed if you use the paid API research button;
+  leave unset to keep it disabled
 
 To redeploy manually: Vercel dashboard → Deployments → Redeploy.
 

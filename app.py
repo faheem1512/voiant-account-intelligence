@@ -15,6 +15,7 @@ Run: python app.py
 Then open http://localhost:5057 in a browser.
 """
 
+import hmac
 import os
 import shutil
 import threading
@@ -24,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
-from flask import Flask, jsonify, render_template_string, request, send_file
+from flask import Flask, jsonify, redirect, render_template_string, request, send_file, session
 
 import scanner
 import Account_research_automation as ara
@@ -34,6 +35,7 @@ import xlsx_style
 from industry_mapping import to_icp_bucket
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
 
 MASTER_LIST_XLSX = "Forbes_2000_master.xlsx"
 SCANNER_WORKERS = 8
@@ -52,6 +54,54 @@ _scanner_master_df = None
 _scanner_next_index = 0
 _scanner_flags_by_company = {}
 _scanner_all_flags = []
+
+
+# --------------------------------------------------------------------------
+# Password gate (APP_PASSWORD env var). Fails closed on Vercel if unset.
+# --------------------------------------------------------------------------
+
+LOGIN_HTML = """
+<!doctype html>
+<title>Voiant Prospect Intelligence - Login</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 360px; margin: 120px auto; }
+  input, button { font-size: 15px; padding: 10px; width: 100%; box-sizing: border-box; margin-top: 10px; }
+  button { background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  .err { color: #b91c1c; font-size: 14px; }
+</style>
+<h2>Voiant Prospect Intelligence</h2>
+<form method="post">
+  <input type="password" name="password" placeholder="Password" autofocus>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <button type="submit">Log in</button>
+</form>
+"""
+
+
+@app.before_request
+def require_login():
+    expected = os.environ.get("APP_PASSWORD")
+    if not expected:
+        if os.environ.get("VERCEL"):
+            return "APP_PASSWORD is not set in the Vercel environment variables.", 503
+        return None  # local dev without a password
+    if request.path == "/login" or session.get("authed"):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "unauthorized"}), 401
+    return redirect("/login")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    expected = os.environ.get("APP_PASSWORD")
+    error = None
+    if request.method == "POST":
+        if expected and hmac.compare_digest(request.form.get("password", ""), expected):
+            session["authed"] = True
+            return redirect("/")
+        error = "Incorrect password."
+    return render_template_string(LOGIN_HTML, error=error)
 
 
 def _tmp(filename):
